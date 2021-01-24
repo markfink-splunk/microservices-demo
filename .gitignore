@@ -12,3 +12,14 @@ pkg/
 .project
 .eclipse.buildship.core.prefs
 release/wi-kubernetes-manifests.yaml
+vendor/
+.devcontainer
+.env
+__pycache__
+.gradle/
+.settings/
+build/
+.classpath
+hipstershop.*
+obj/
+node_modules/

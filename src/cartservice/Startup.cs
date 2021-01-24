@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Hosting;
@@ -9,6 +10,10 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using cartservice.cartstore;
 using cartservice.services;
+
+using OpenTelemetry;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Resources;
 
 namespace cartservice
 {
@@ -40,6 +45,65 @@ namespace cartservice
 
             // Initialize the redis store
             cartStore.InitializeAsync().GetAwaiter().GetResult();
+
+            /* As of v1.0.0-RC1, resource detector functions are marked
+            internal and not available to us.  So we must look at env variables
+            here. I will update this as the detector functions become available.
+            */
+            string endpoint =  Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT") ?? "localhost:4317";
+            string tag_env = Environment.GetEnvironmentVariable("OTEL_RESOURCE_ATTRIBUTES");
+
+            // parse OTEL_RESOURCE_ATTRIBUTES
+            // use this to set service.name and Splunk APM environment
+            // the library applies defaults if they are unset
+            IDictionary<string,object> tags = new Dictionary<string, object>();
+            if (tag_env != null)
+            {
+                string[] pairs = tag_env.Split(",");
+                foreach (string pair in pairs)
+                {
+                    string[] x = pair.Split("=");
+                    tags.Add(x[0], x[1]);
+                }
+            }
+
+            /* This needs to come after InitializeAsync() above so that
+            cartStore.Redis is defined, which we need to add Redis
+            instrumentation below.  This was tricky because the original code
+            defined that property as private in the ICartStore class.  I had to
+            modify ICartStore to make it public, so we can access it here. 
+            Concerning because this is not even remotely "automatic" as we want
+            tracing to be.
+            */
+            if (cartStore.Redis != null)
+            {
+                // With redis
+                services.AddOpenTelemetryTracing(
+                    (builder) => builder
+                        .SetSampler(new AlwaysOnSampler())
+                        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddAttributes(tags))
+                        .AddAspNetCoreInstrumentation()
+                        .AddGrpcClientInstrumentation(
+                            opt => opt.SuppressDownstreamInstrumentation = true)
+                        .AddHttpClientInstrumentation()
+                        .AddRedisInstrumentation(cartStore.Redis)
+                        .AddOtlpExporter(o => o.Endpoint = endpoint)
+                );
+            }
+            else
+            {
+                // Without redis
+                services.AddOpenTelemetryTracing(
+                    (builder) => builder
+                        .SetSampler(new AlwaysOnSampler())
+                        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddAttributes(tags))
+                        .AddAspNetCoreInstrumentation()
+                        .AddGrpcClientInstrumentation(
+                            opt => opt.SuppressDownstreamInstrumentation = true)
+                        .AddHttpClientInstrumentation()
+                        .AddOtlpExporter(o => o.Endpoint = endpoint)
+                );
+            }
             Console.WriteLine("Initialization completed");
 
             services.AddSingleton<ICartStore>(cartStore);

@@ -43,4 +43,6 @@ COPY . .
 
 EXPOSE 7000
 
-ENTRYPOINT [ "node", "server.js" ]
+# Note we run tracer.js first now for OpenTelemetry instrumentation.
+# tracer.js triggers server.js after tracer init.
+ENTRYPOINT [ "node", "tracer.js" ]

@@ -22,17 +22,22 @@ import (
 	"time"
 
 	"cloud.google.com/go/profiler"
-	"contrib.go.opencensus.io/exporter/jaeger"
-	"contrib.go.opencensus.io/exporter/stackdriver"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"go.opencensus.io/plugin/ocgrpc"
-	"go.opencensus.io/plugin/ochttp"
-	"go.opencensus.io/plugin/ochttp/propagation/b3"
-	"go.opencensus.io/stats/view"
-	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpgrpc"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/contrib/propagators/b3"
+	"go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/resource"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	// net/http instrumentation is redundant with gorilla/mux.
+	//"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 const (
@@ -80,6 +85,78 @@ type frontendServer struct {
 	adSvcConn *grpc.ClientConn
 }
 
+func initTracer(ctx context.Context, log logrus.FieldLogger) func() {
+	// Ideally, all config options for NewDriver would be configurable with
+	// environment variables baked into otlp, but not as of 0.16.0.
+	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if endpoint == "" { endpoint = "localhost:4317" }
+
+	driver := otlpgrpc.NewDriver(
+		otlpgrpc.WithInsecure(),
+		otlpgrpc.WithEndpoint(endpoint),
+		//otlpgrpc.WithDialOption(grpc.WithBlock()), // useful for testing
+	)
+	exporter, err := otlp.NewExporter(ctx, driver)
+	if err != nil {
+		log.Fatalf("%s: %v", "failed to create exporter", err)
+	}
+	bsp := trace.NewBatchSpanProcessor(exporter)
+
+	// This adds standard TelemetrySDK tags and OTEL_RESOURCE_ATTRIBUTES.
+	res, err := resource.New(ctx)
+	tracerProvider := trace.NewTracerProvider(
+		trace.WithConfig(trace.Config{DefaultSampler: trace.AlwaysSample()}),
+		trace.WithResource(res),
+		trace.WithSpanProcessor(bsp),
+	)
+	otel.SetTracerProvider(tracerProvider)
+	setOtelPropagation();
+
+	// OTLP METRICS
+	// pusher := push.New(
+	// 	basic.New(
+	// 		simple.NewWithExactDistribution(),
+	// 		exp,
+	// 	),
+	// 	exp,
+	// 	push.WithPeriod(2*time.Second),
+	// )
+	//otel.SetMeterProvider(pusher.MeterProvider())
+	//pusher.Start()
+
+	return func() {
+		err := tracerProvider.Shutdown(ctx)
+		if err != nil {
+			log.Fatalf("%s: %v", "failed to shutdown provider", err)
+		}
+		err = exporter.Shutdown(ctx)
+		if err != nil {
+			log.Fatalf("%s: %v", "failed to stop exporter", err)
+		}
+		//pusher.Stop() // pushes any last exports to the receiver
+	}
+}
+
+func setOtelPropagation() {
+	/* As of 0.16.0, propagation with any exporter in Go is disabled by default
+	and does not look at OTEL_PROPAGATORS.  W3C, B3, and Jaeger are supported. 
+	The following looks for B3 and otherwise defaults to W3C.  Baggage is
+	enabled either way.  I use OTEL_PROPAGATORS to be consistent with what I
+	expect in the future.
+	*/
+	switch os.Getenv("OTEL_PROPAGATORS") {
+	case "b3":
+		otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+			b3.B3{InjectEncoding: b3.B3SingleHeader}, propagation.Baggage{}))
+	case "b3multi":
+		otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+			b3.B3{InjectEncoding: b3.B3MultipleHeader}, propagation.Baggage{}))
+	default:
+		otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+			propagation.TraceContext{}, propagation.Baggage{}))
+	}
+}
+
 func main() {
 	ctx := context.Background()
 	log := logrus.New()
@@ -96,7 +173,8 @@ func main() {
 
 	if os.Getenv("DISABLE_TRACING") == "" {
 		log.Info("Tracing enabled.")
-		go initTracing(log)
+		fn := initTracer(ctx, log)
+		defer fn()
 	} else {
 		log.Info("Tracing disabled.")
 	}
@@ -131,6 +209,7 @@ func main() {
 	mustConnGRPC(ctx, &svc.adSvcConn, svc.adSvcAddr)
 
 	r := mux.NewRouter()
+	r.Use(otelmux.Middleware("hipstershop.frontend"))
 	r.HandleFunc("/", svc.homeHandler).Methods(http.MethodGet, http.MethodHead)
 	r.HandleFunc("/product/{id}", svc.productHandler).Methods(http.MethodGet, http.MethodHead)
 	r.HandleFunc("/cart", svc.viewCartHandler).Methods(http.MethodGet, http.MethodHead)
@@ -146,88 +225,19 @@ func main() {
 	var handler http.Handler = r
 	handler = &logHandler{log: log, next: handler} // add logging
 	handler = ensureSessionID(handler)             // add session ID
-	handler = &ochttp.Handler{                     // add opencensus instrumentation
-		Handler:     handler,
-		Propagation: &b3.HTTPFormat{}}
+
+	/* The line below is for net/http instrumentation.  It is redundant with
+	gorilla/mux; you should not instrument both. And gorilla/mux provides
+	better operation naming based on the routes above, so it is preferred.
+
+	To try it out, uncomment the line below.  Change "handler" in the
+	ListenAndServe line (a few lines down) to "otelHandler".  And uncomment
+	the import at the beginning of this file.
+	*/
+	//otelHandler := otelhttp.NewHandler(handler, "otel-frontend")
 
 	log.Infof("starting server on " + addr + ":" + srvPort)
 	log.Fatal(http.ListenAndServe(addr+":"+srvPort, handler))
-}
-
-func initJaegerTracing(log logrus.FieldLogger) {
-
-	svcAddr := os.Getenv("JAEGER_SERVICE_ADDR")
-	if svcAddr == "" {
-		log.Info("jaeger initialization disabled.")
-		return
-	}
-
-	// Register the Jaeger exporter to be able to retrieve
-	// the collected spans.
-	exporter, err := jaeger.NewExporter(jaeger.Options{
-		Endpoint: fmt.Sprintf("http://%s", svcAddr),
-		Process: jaeger.Process{
-			ServiceName: "frontend",
-		},
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	trace.RegisterExporter(exporter)
-	log.Info("jaeger initialization completed.")
-}
-
-func initStats(log logrus.FieldLogger, exporter *stackdriver.Exporter) {
-	view.SetReportingPeriod(60 * time.Second)
-	view.RegisterExporter(exporter)
-	if err := view.Register(ochttp.DefaultServerViews...); err != nil {
-		log.Warn("Error registering http default server views")
-	} else {
-		log.Info("Registered http default server views")
-	}
-	if err := view.Register(ocgrpc.DefaultClientViews...); err != nil {
-		log.Warn("Error registering grpc default client views")
-	} else {
-		log.Info("Registered grpc default client views")
-	}
-}
-
-func initStackdriverTracing(log logrus.FieldLogger) {
-	// TODO(ahmetb) this method is duplicated in other microservices using Go
-	// since they are not sharing packages.
-	for i := 1; i <= 3; i++ {
-		log = log.WithField("retry", i)
-		exporter, err := stackdriver.NewExporter(stackdriver.Options{})
-		if err != nil {
-			// log.Warnf is used since there are multiple backends (stackdriver & jaeger)
-			// to store the traces. In production setup most likely you would use only one backend.
-			// In that case you should use log.Fatalf.
-			log.Warnf("failed to initialize Stackdriver exporter: %+v", err)
-		} else {
-			trace.RegisterExporter(exporter)
-			log.Info("registered Stackdriver tracing")
-
-			// Register the views to collect server stats.
-			initStats(log, exporter)
-			return
-		}
-		d := time.Second * 20 * time.Duration(i)
-		log.Debugf("sleeping %v to retry initializing Stackdriver exporter", d)
-		time.Sleep(d)
-	}
-	log.Warn("could not initialize Stackdriver exporter after retrying, giving up")
-}
-
-func initTracing(log logrus.FieldLogger) {
-	// This is a demo app with low QPS. trace.AlwaysSample() is used here
-	// to make sure traces are available for observation and analysis.
-	// In a production environment or high QPS setup please use
-	// trace.ProbabilitySampler set at the desired probability.
-	trace.ApplyConfig(trace.Config{DefaultSampler: trace.AlwaysSample()})
-
-	initJaegerTracing(log)
-	initStackdriverTracing(log)
-
 }
 
 func initProfiling(log logrus.FieldLogger, service, version string) {
@@ -266,7 +276,8 @@ func mustConnGRPC(ctx context.Context, conn **grpc.ClientConn, addr string) {
 	*conn, err = grpc.DialContext(ctx, addr,
 		grpc.WithInsecure(),
 		grpc.WithTimeout(time.Second*3),
-		grpc.WithStatsHandler(&ocgrpc.ClientHandler{}))
+		grpc.WithUnaryInterceptor(otelgrpc.UnaryClientInterceptor()),
+		grpc.WithStreamInterceptor(otelgrpc.StreamClientInterceptor()))
 	if err != nil {
 		panic(errors.Wrapf(err, "grpc: failed to connect %s", addr))
 	}

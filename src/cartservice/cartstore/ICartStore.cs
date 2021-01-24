@@ -13,6 +13,7 @@
 // limitations under the License.
 
 using System.Threading.Tasks;
+using StackExchange.Redis;
 
 namespace cartservice.cartstore
 {
@@ -25,6 +26,11 @@ namespace cartservice.cartstore
 
         Task<Hipstershop.Cart> GetCartAsync(string userId);
 
+        // Expose this for OpenTelemetry tracing.
+        ConnectionMultiplexer Redis
+        {
+            get;
+        }
         bool Ping();
     }
 }
