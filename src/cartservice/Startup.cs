@@ -46,26 +46,11 @@ namespace cartservice
             // Initialize the redis store
             cartStore.InitializeAsync().GetAwaiter().GetResult();
 
-            /* As of v1.0.0-RC1, resource detector functions are marked
-            internal and not available to us.  So we must look at env variables
-            here. I will update this as the detector functions become available.
+            /* As of v1.0.0-RC1, Zipkin does not look at the env variable, so
+            we must do it here.  The OTLP exporter depends on an older version
+            of GRPC that is more trouble than it's worth; Zipkin is much easier.
             */
-            string endpoint =  Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT") ?? "localhost:4317";
-            string tag_env = Environment.GetEnvironmentVariable("OTEL_RESOURCE_ATTRIBUTES");
-
-            // parse OTEL_RESOURCE_ATTRIBUTES
-            // use this to set service.name and Splunk APM environment
-            // the library applies defaults if they are unset
-            IDictionary<string,object> tags = new Dictionary<string, object>();
-            if (tag_env != null)
-            {
-                string[] pairs = tag_env.Split(",");
-                foreach (string pair in pairs)
-                {
-                    string[] x = pair.Split("=");
-                    tags.Add(x[0], x[1]);
-                }
-            }
+            string endpoint =  Environment.GetEnvironmentVariable("OTEL_EXPORTER_ZIPKIN_ENDPOINT") ?? "http://localhost:9411/api/v2/spans";
 
             /* This needs to come after InitializeAsync() above so that
             cartStore.Redis is defined, which we need to add Redis
@@ -74,6 +59,10 @@ namespace cartservice
             modify ICartStore to make it public, so we can access it here. 
             Concerning because this is not even remotely "automatic" as we want
             tracing to be.
+
+            AddEnvironmentVariableDetector reads OTEL_RESOURCE_ATTRIBUTES;
+            however, it adds entries as span attributes and not resource
+            labels.  The outcome still works with Splunk APM but it's not ideal.
             */
             if (cartStore.Redis != null)
             {
@@ -81,13 +70,14 @@ namespace cartservice
                 services.AddOpenTelemetryTracing(
                     (builder) => builder
                         .SetSampler(new AlwaysOnSampler())
-                        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddAttributes(tags))
+                        .SetResourceBuilder(ResourceBuilder.CreateDefault()
+                            .AddEnvironmentVariableDetector())
                         .AddAspNetCoreInstrumentation()
                         .AddGrpcClientInstrumentation(
                             opt => opt.SuppressDownstreamInstrumentation = true)
                         .AddHttpClientInstrumentation()
                         .AddRedisInstrumentation(cartStore.Redis)
-                        .AddOtlpExporter(o => o.Endpoint = endpoint)
+                        .AddZipkinExporter(o => o.Endpoint = new Uri(endpoint))
                 );
             }
             else
@@ -96,12 +86,13 @@ namespace cartservice
                 services.AddOpenTelemetryTracing(
                     (builder) => builder
                         .SetSampler(new AlwaysOnSampler())
-                        .SetResourceBuilder(ResourceBuilder.CreateDefault().AddAttributes(tags))
+                        .SetResourceBuilder(ResourceBuilder.CreateDefault()
+                            .AddEnvironmentVariableDetector())
                         .AddAspNetCoreInstrumentation()
                         .AddGrpcClientInstrumentation(
                             opt => opt.SuppressDownstreamInstrumentation = true)
                         .AddHttpClientInstrumentation()
-                        .AddOtlpExporter(o => o.Endpoint = endpoint)
+                        .AddZipkinExporter(o => o.Endpoint = new Uri(endpoint))
                 );
             }
             Console.WriteLine("Initialization completed");

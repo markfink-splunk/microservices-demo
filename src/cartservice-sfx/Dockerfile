@@ -17,7 +17,7 @@ FROM mcr.microsoft.com/dotnet/sdk:5.0.101 as builder
 WORKDIR /app
 COPY cartservice.csproj .
 COPY . .
-RUN dotnet restore cartservice.csproj -r linux-musl-x64 --force
+RUN dotnet restore cartservice.csproj -r linux-musl-x64
 
 RUN dotnet publish cartservice.csproj -p:PublishSingleFile=true -r linux-musl-x64 -p:PublishTrimmed=True -p:TrimMode=Link -c release -o /cartservice --no-restore
 
