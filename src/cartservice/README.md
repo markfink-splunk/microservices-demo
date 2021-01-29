@@ -1,0 +1,13 @@
+## OpenTelemetry Notes
+
+There is intent to create a more automated dotnet tracer based on DataDog's tracer here:  https://github.com/open-telemetry/opentelemetry-dotnet-instrumentation.  As of this writing, it appears little to nothing has been done on it.
+
+The SignalFx dotnet tracer is based on the same upstream DataDog tracer, so you are better off using that.  For the time being, I recommend using the SignalFx tracer as a first resort.
+
+For Hipster Shop, I used the OpenTelemetry .NET SDK here:  https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/src/OpenTelemetry/README.md
+
+As of this writing, the latest release is 1.0.0-RC1; however they have nightly builds.  There is a note about this at the very bottom of the main repo page:  https://github.com/open-telemetry/opentelemetry-dotnet.  It behooves you to use the nightly builds; they fix many issues and are well ahead of the last release.  The "install_nightly_builds.sh" script provides the commands you need to, as its name says, install the nightly build packages needed for cartservice -- this is in lieu of installing the OpenTelemetry packages as otherwise documented in the repo.  And this assumes you have a dotnet build environment prepared (see below).
+
+Step 1 is to install the nightly build packages and other dependencies with "dotnet restore", then step 2 is to edit Startup.cs to add the instrumentation into the source.  Refer to the comments and additions in Startup.cs in this repo to see how it works.  The final step is to build the new Docker image.  I commented a slight adjustment in the Dockerfile to accommodate using the nightly builds.
+
+I leave it to you to figure out how to create a dotnet build environment since there are several ways to do that.  You generally need the .NET SDK and dotnet cli installed.  While it is possible to install these on a Mac, I ran into other issues as I got further along that led me to use a devcontainer in VS Code (google how to create them).  For this project, use Dockerfile.debug to create a devcontainer.  This truly is the best way on a Mac.  If you are on Windows, you can avoid using a devcontainer.  Which is why I leave it to you to figure out what is easiest and best for you.  You will also want an IDE, and being Microsoft, you are likely better off with VS or VS Code.  With VS Code, install the C# extension and you can then debug the code.  The C# extension will tell you if you don't have the .NET SDK or dotnet cli installed.  And learn the basic dotnet commands like "dotnet restore" and "dotnet run".  If you are unfamiliar with all this, you will need to put the time in to learn it.  The concepts are just like other languages like Python, Go, Node, and so on.
