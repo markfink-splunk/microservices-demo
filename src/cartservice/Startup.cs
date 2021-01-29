@@ -47,10 +47,12 @@ namespace cartservice
             cartStore.InitializeAsync().GetAwaiter().GetResult();
 
             // As of v1.0.0-RC1.69, the Otlp exporter does not look at the env
-            // variable, so we must do it here.
-            string endpoint =  Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT") ?? "localhost:4317";
+            // variable, so we must do it here.  Unlike other languages, the
+            // Otlp grpc endpoint must have http:// or https:// prepended.  I
+            // expect the authors will eventually notice this and update it.
+            string endpoint =  Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT") ?? "http://localhost:4317";
 
-            /* This needs to come after InitializeAsync() above so that
+            /* Tracer init needs to come after InitializeAsync() above so that
             cartStore.Redis is defined, which we need to add Redis
             instrumentation below.  This was tricky because the original code
             defined that property as private in the ICartStore class.  I had to
