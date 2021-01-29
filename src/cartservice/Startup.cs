@@ -14,6 +14,7 @@ using cartservice.services;
 using OpenTelemetry;
 using OpenTelemetry.Trace;
 using OpenTelemetry.Resources;
+using OpenTelemetry.Context.Propagation;
 
 namespace cartservice
 {
@@ -46,10 +47,12 @@ namespace cartservice
             // Initialize the redis store
             cartStore.InitializeAsync().GetAwaiter().GetResult();
 
-            // As of v1.0.0-RC1.69, the Otlp exporter does not look at the env
-            // variable, so we must do it here.  Unlike other languages, the
-            // Otlp grpc endpoint must have http:// or https:// prepended.  I
-            // expect the authors will eventually notice this and update it.
+            /* As of v1.0.0-RC1.69, the Otlp exporter does not look at the
+            ENDPOINT variable, so we must do it here.  Also, the Otlp gRPC
+            endpoint must have http:// prepended for insecure transport.  I
+            filed an issue to follow other languages that use
+            OTEL_EXPORTER_OTLP_INSECURE.
+            */
             string endpoint =  Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT") ?? "http://localhost:4317";
 
             /* Tracer init needs to come after InitializeAsync() above so that
@@ -89,6 +92,23 @@ namespace cartservice
                         .AddOtlpExporter(o => o.Endpoint = new Uri(endpoint))
                 );
             }
+            /* Current implementation defaults to W3C+baggage for propagation
+            and does not look at OTEL_PROPAGATORS.  Since it defaults to W3C
+            anyway, we just look for b3 or b3multi here.
+            */
+            string propagator =  Environment.GetEnvironmentVariable("OTEL_PROPAGATORS");
+            if (propagator == "b3" || propagator == "b3multi")
+            {
+                bool singleHeader = false;
+                if (propagator == "b3") { singleHeader = true; }
+
+                Sdk.SetDefaultTextMapPropagator(new CompositeTextMapPropagator(new TextMapPropagator[]
+                    {
+                        new B3Propagator(singleHeader),
+                        new BaggagePropagator(),
+                    }));
+            }
+
             Console.WriteLine("Initialization completed");
 
             services.AddSingleton<ICartStore>(cartStore);
