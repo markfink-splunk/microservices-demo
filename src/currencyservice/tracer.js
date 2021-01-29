@@ -11,7 +11,7 @@ that's how it is.  It complicates things because we have to run this script
 first, wait for the Promise to be fulfilled, then run server.js, none of
 which is automatic -- and the manner in which you do this will vary by
 program.  So there's a built-in degree of difficulty to this that only works
-against adoption.
+against adoption (imho).
 
 We could use @opentelemetry/node that runs synchronously as long as we don't
 read environment variables for anything (or we read the env variables with our
@@ -35,7 +35,10 @@ else {
 
 async function initTracer(callback) {
   const otel = require("@opentelemetry/sdk-node");
-  const { B3Propagator } = require("@opentelemetry/propagator-b3");
+  const api = require("@opentelemetry/api");
+  const { CompositePropagator, HttpBaggage } = require('@opentelemetry/core');
+  const { B3SinglePropagator, B3MultiPropagator } = 
+    require("@opentelemetry/propagator-b3");
   const { CollectorTraceExporter } =
     require('@opentelemetry/exporter-collector-grpc');
 
@@ -49,10 +52,9 @@ async function initTracer(callback) {
   const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || "localhost:4317";
   const exporter = new CollectorTraceExporter({ url: endpoint });
 
-  // This defaults to AlwaysOn sampling.
+  // This defaults to AlwaysOn sampling.  
   const sdk = new otel.NodeSDK({
     traceExporter: exporter,
-    textMapPropagator: new B3Propagator(),
     // we have to explicitly disable plugin-grpc or we get an error.
     plugins: {
       grpc: { enabled: false, path: '@opentelemetry/plugin-grpc' }
@@ -61,6 +63,19 @@ async function initTracer(callback) {
     //logger: console,
     //logLevel: "DEBUG"
   });
+
+  // Propagation defaults to W3C+baggage.  It does not look at
+  // OTEL_PROPAGATORS, so we do that here for b3.
+  const propagators = process.env.OTEL_PROPAGATORS;
+  if (propagators == "b3" || propagators == "b3multi") {
+    var b3 = new B3MultiPropagator();
+    if (propagators == "b3") { 
+      b3 = new B3SinglePropagator();
+    }
+    api.propagation.setGlobalPropagator(new CompositePropagator({ 
+      propagators: [b3, new HttpBaggage()]
+    }));
+  }
 
   // sdk.start() auto-adds attributes from OTEL_RESOURCE_ATTRIBUTES.
   await sdk
