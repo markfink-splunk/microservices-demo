@@ -46,23 +46,15 @@ namespace cartservice
             // Initialize the redis store
             cartStore.InitializeAsync().GetAwaiter().GetResult();
 
-            /* As of v1.0.0-RC1, Zipkin does not look at the env variable, so
-            we must do it here.  The OTLP exporter depends on an older version
-            of GRPC that is more trouble than it's worth; Zipkin is much easier.
-            */
-            string endpoint =  Environment.GetEnvironmentVariable("OTEL_EXPORTER_ZIPKIN_ENDPOINT") ?? "http://localhost:9411/api/v2/spans";
+            // As of v1.0.0-RC1.69, the Otlp exporter does not look at the env
+            // variable, so we must do it here.
+            string endpoint =  Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT") ?? "localhost:4317";
 
             /* This needs to come after InitializeAsync() above so that
             cartStore.Redis is defined, which we need to add Redis
             instrumentation below.  This was tricky because the original code
             defined that property as private in the ICartStore class.  I had to
             modify ICartStore to make it public, so we can access it here. 
-            Concerning because this is not even remotely "automatic" as we want
-            tracing to be.
-
-            AddEnvironmentVariableDetector reads OTEL_RESOURCE_ATTRIBUTES;
-            however, it adds entries as span attributes and not resource
-            labels.  The outcome still works with Splunk APM but it's not ideal.
             */
             if (cartStore.Redis != null)
             {
@@ -77,7 +69,7 @@ namespace cartservice
                             opt => opt.SuppressDownstreamInstrumentation = true)
                         .AddHttpClientInstrumentation()
                         .AddRedisInstrumentation(cartStore.Redis)
-                        .AddZipkinExporter(o => o.Endpoint = new Uri(endpoint))
+                        .AddOtlpExporter(o => o.Endpoint = new Uri(endpoint))
                 );
             }
             else
@@ -92,7 +84,7 @@ namespace cartservice
                         .AddGrpcClientInstrumentation(
                             opt => opt.SuppressDownstreamInstrumentation = true)
                         .AddHttpClientInstrumentation()
-                        .AddZipkinExporter(o => o.Endpoint = new Uri(endpoint))
+                        .AddOtlpExporter(o => o.Endpoint = new Uri(endpoint))
                 );
             }
             Console.WriteLine("Initialization completed");
