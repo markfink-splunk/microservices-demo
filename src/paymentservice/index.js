@@ -87,7 +87,9 @@ async function initTracer(callback) {
   const grpcInstrumentation = new GrpcInstrumentation();
   grpcInstrumentation.enable();
 
-  // Exporter init does not look at the ENDPOINT env variable, so we must do it.
+  // Exporter init does not look at the ENDPOINT env variable, so we must do
+  // it.  Also JS differs from other languages right now in that it defaults to
+  // an insecure connection (no TLS).
   const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || "localhost:4317";
   const exporter = new CollectorTraceExporter({ url: endpoint });
 
