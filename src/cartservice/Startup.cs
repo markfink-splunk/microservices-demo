@@ -47,11 +47,10 @@ namespace cartservice
             // Initialize the redis store
             cartStore.InitializeAsync().GetAwaiter().GetResult();
 
-            /* As of v1.0.0-RC1.69, the Otlp exporter does not look at the
+            /* As of this build, the Otlp exporter does not look at the
             ENDPOINT variable, so we must do it here.  Also, the Otlp gRPC
-            endpoint must have http:// prepended for insecure transport.  I
-            filed an issue to follow other languages that use
-            OTEL_EXPORTER_OTLP_INSECURE.
+            endpoint must have http:// prepended for insecure transport --
+            which is unique to dotnet right now.
             */
             string endpoint =  Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT") ?? "http://localhost:4317";
 
@@ -92,10 +91,8 @@ namespace cartservice
                         .AddOtlpExporter(o => o.Endpoint = new Uri(endpoint))
                 );
             }
-            /* Current implementation defaults to W3C+baggage for propagation
-            and does not look at OTEL_PROPAGATORS.  Since it defaults to W3C
-            anyway, we just look for b3 or b3multi here.
-            */
+            // Propagation defaults to W3C+baggage.  It does not look at
+            // OTEL_PROPAGATORS, so we do that here for b3.
             string propagator =  Environment.GetEnvironmentVariable("OTEL_PROPAGATORS");
             if (propagator == "b3" || propagator == "b3multi")
             {
