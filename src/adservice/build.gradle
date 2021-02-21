@@ -97,6 +97,8 @@ task adService(type: CreateStartScripts) {
     defaultJvmOpts =
             ["-javaagent:${buildDir}/install/hipstershop/lib/opentelemetry-javaagent-all.jar", "-agentpath:/opt/cprof/profiler_java_agent.so=-cprof_service=adserviceclient,-cprof_service_version=1.0.0"]
 }
+// this is how we instrument specific methods
+// "-Dotel.instrumentation.methods.include=hipstershop.AdService\$AdServiceImpl/// [getAds];hipstershop.AdService[getRandomAds]"
 
 task adServiceClient(type: CreateStartScripts) {
     mainClassName = 'hipstershop.AdServiceClient'
