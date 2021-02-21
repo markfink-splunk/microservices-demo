@@ -43,7 +43,7 @@ RUN GRPC_HEALTH_PROBE_VERSION=v0.3.6 && \
 WORKDIR /app
 COPY --from=builder /app .
 
-ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v0.14.0/opentelemetry-javaagent-all.jar /app/build/install/hipstershop/lib
+ADD https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v0.17.0/opentelemetry-javaagent-all.jar /app/build/install/hipstershop/lib
 RUN chmod 644 /app/build/install/hipstershop/lib/opentelemetry-javaagent-all.jar
 
 EXPOSE 9555

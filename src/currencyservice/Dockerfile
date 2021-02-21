@@ -45,4 +45,4 @@ EXPOSE 7000
 
 # Note we run tracer.js first now for OpenTelemetry instrumentation.
 # tracer.js triggers server.js after tracer init.
-ENTRYPOINT [ "node", "tracer.js" ]
+ENTRYPOINT [ "node", "tracer-zipkin.js" ]

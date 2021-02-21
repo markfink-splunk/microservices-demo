@@ -67,25 +67,16 @@ async function initTracer(callback) {
   const { CompositePropagator, HttpBaggage } = require('@opentelemetry/core');
   const { B3SinglePropagator, B3MultiPropagator } = 
     require("@opentelemetry/propagator-b3");
-  const { ZipkinExporter } =
-    require('@opentelemetry/exporter-zipkin');
+  const { CollectorTraceExporter } = 
+    require('@opentelemetry/exporter-collector-grpc');
   const { GrpcInstrumentation } = 
     require('@opentelemetry/instrumentation-grpc');
 
-  /* 
-  Went with Zipkin over Jaeger because:
-  - Jaeger as implemented does not honor JAEGER_SERVICE_NAME or JAEGER_TAGS.
-  - The Jaeger service name still has to be set and it overrides the Otel
-    service.name (which is a major pita when combined with above).
-  - Jaeger sticks OTEL_RESOURCE_ATTRIBUTES into span attributes (vs resource).
-  - Zipkin handles the Otel service.name correctly.
-  - It sticks other OTEL_RESOURCE_ATTRIBUTES into span attributes, but we can
-    live with that for now.
-  */
-
-  const endpoint = process.env.OTEL_EXPORTER_ZIPKIN_ENDPOINT ||
-    "http://localhost:9411/api/v2/spans";
-  const exporter = new ZipkinExporter({ url: endpoint });
+  // Exporter init does not look at the ENDPOINT env variable, so we must do
+  // it.  Also JS differs from other languages right now in that it defaults to
+  // an insecure connection (no TLS).
+  const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || "localhost:4317";
+  const exporter = new CollectorTraceExporter({ url: endpoint });
 
   // This defaults to AlwaysOn sampling.  
   const sdk = new otel.NodeSDK({

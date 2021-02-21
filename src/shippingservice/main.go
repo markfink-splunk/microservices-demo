@@ -31,6 +31,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpgrpc"
+	"go.opentelemetry.io/otel/exporters/trace/jaeger"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/contrib/propagators/b3"
 	"go.opentelemetry.io/otel/sdk/trace"
@@ -61,8 +62,24 @@ func init() {
 	log.Out = os.Stdout
 }
 
-func initTracer(log logrus.FieldLogger) func() {
-	// As of 0.16.0, NewDriver does not look at the ENDPOINT variable, so we do
+func initJaeger(log logrus.FieldLogger) func() {
+	// As of 0.17.0, the Jaeger exporter supports Thrift only, not gRPC.
+	// It honors standard Jaeger environment variables.
+	flush, err := jaeger.InstallNewPipeline(
+		jaeger.WithCollectorEndpoint("http://localhost:14268/api/traces"),
+		jaeger.WithProcess(jaeger.Process{
+			ServiceName: "go-service",
+		}),
+		jaeger.WithSDK(&trace.Config{DefaultSampler: trace.AlwaysSample()}),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return flush
+}
+
+func initOtlp(log logrus.FieldLogger) func() {
+	// As of 0.17.0, NewDriver does not look at the ENDPOINT variable, so we do
 	// it here.
 	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 	if endpoint == "" { endpoint = "localhost:4317" }
@@ -88,7 +105,6 @@ func initTracer(log logrus.FieldLogger) func() {
 		trace.WithSpanProcessor(bsp),
 	)
 	otel.SetTracerProvider(tracerProvider)
-	setOtelPropagation()
 
 	// OTLP METRICS
 	// pusher := push.New(
@@ -116,7 +132,7 @@ func initTracer(log logrus.FieldLogger) func() {
 }
 
 func setOtelPropagation() {
-	/* As of 0.16.0, propagation with any exporter in Go is disabled by default
+	/* As of 0.17.0, propagation with any exporter in Go is disabled by default
 	and does not look at OTEL_PROPAGATORS.  W3C, B3, and Jaeger are supported. 
 	The following looks for B3 and otherwise defaults to W3C.  Baggage is
 	enabled either way.  I use OTEL_PROPAGATORS to be consistent with what I
@@ -138,8 +154,14 @@ func setOtelPropagation() {
 func main() {
 	if os.Getenv("DISABLE_TRACING") == "" {
 		log.Info("Tracing enabled.")
-		fn := initTracer(log)
+		var fn func()
+		if os.Getenv("OTEL_TRACES_EXPORTER") == "jaeger" {
+			fn = initJaeger(log)
+		} else {
+			fn = initOtlp(log)
+		}
 		defer fn()
+		setOtelPropagation()
 	} else {
 		log.Info("Tracing disabled.")
 	}

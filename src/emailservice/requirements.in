@@ -4,8 +4,11 @@ grpcio~=1.27
 jinja2==2.10.1
 python-json-logger==0.1.9
 google-cloud-profiler==1.0.8
-opentelemetry-sdk==0.16b1
-opentelemetry-exporter-otlp==0.16b1
-opentelemetry-instrumentation==0.16b1
-opentelemetry-instrumentation-grpc==0.16b1
-opentelemetry-instrumentation-jinja2==0.16b1
+opentelemetry-sdk==1.0.0rc1
+opentelemetry-exporter-otlp==1.0.0rc1
+opentelemetry-exporter-jaeger==1.0.0rc1
+opentelemetry-propagator-b3==1.0.0rc1
+opentelemetry-distro==0.18b0
+opentelemetry-instrumentation==0.18b0
+opentelemetry-instrumentation-grpc==0.18b0
+opentelemetry-instrumentation-jinja2==0.18b0

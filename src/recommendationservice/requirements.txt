@@ -39,6 +39,7 @@ google-python-cloud-debugger==2.15
 googleapis-common-protos==1.52.0
     # via
     #   google-api-core
+    #   opentelemetry-exporter-jaeger
     #   opentelemetry-exporter-otlp
 grpcio-health-checking==1.30.0
     # via -r requirements.in
@@ -46,6 +47,7 @@ grpcio==1.30.0
     # via
     #   -r requirements.in
     #   grpcio-health-checking
+    #   opentelemetry-exporter-jaeger
     #   opentelemetry-exporter-otlp
     #   opentelemetry-instrumentation-grpc
 httplib2==0.18.1
@@ -54,25 +56,35 @@ httplib2==0.18.1
     #   google-auth-httplib2
 idna==2.10
     # via requests
-opentelemetry-api==0.16b1
+opentelemetry-api==1.0.0rc1
     # via
+    #   opentelemetry-distro
+    #   opentelemetry-exporter-jaeger
     #   opentelemetry-exporter-otlp
     #   opentelemetry-instrumentation
     #   opentelemetry-instrumentation-grpc
+    #   opentelemetry-propagator-b3
     #   opentelemetry-sdk
-opentelemetry-exporter-otlp==0.16b1
+opentelemetry-distro==0.18b0
     # via -r requirements.in
-opentelemetry-instrumentation-grpc==0.16b1
+opentelemetry-exporter-jaeger==1.0.0rc1
     # via -r requirements.in
-opentelemetry-instrumentation==0.16.b1
+opentelemetry-exporter-otlp==1.0.0rc1
     # via -r requirements.in
-opentelemetry-proto==0.16b1
+opentelemetry-instrumentation-grpc==0.18b0
+    # via -r requirements.in
+opentelemetry-instrumentation==0.18b0
+    # via -r requirements.in
+opentelemetry-propagator-b3==1.0.0rc1
+    # via -r requirements.in
+opentelemetry-proto==1.0.0rc1
     # via opentelemetry-exporter-otlp
-opentelemetry-sdk==0.16b1
+opentelemetry-sdk==1.0.0rc1
     # via
     #   -r requirements.in
+    #   opentelemetry-distro
+    #   opentelemetry-exporter-jaeger
     #   opentelemetry-exporter-otlp
-    #   opentelemetry-instrumentation
     #   opentelemetry-instrumentation-grpc
 protobuf==3.14.0
     # via
@@ -109,6 +121,9 @@ six==1.12.0
     #   google-python-cloud-debugger
     #   grpcio
     #   protobuf
+    #   thrift
+thrift==0.13.0
+    # via opentelemetry-exporter-jaeger
 uritemplate==3.0.0
     # via google-api-python-client
 urllib3==1.24.2

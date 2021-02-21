@@ -11,11 +11,12 @@ require (
 	github.com/konsorten/go-windows-terminal-sequences v1.0.3 // indirect
 	github.com/sirupsen/logrus v1.7.0
 	github.com/stretchr/objx v0.1.1 // indirect
-	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.16.0
-	go.opentelemetry.io/contrib/propagators v0.16.0
-	go.opentelemetry.io/otel v0.16.0
-	go.opentelemetry.io/otel/exporters/otlp v0.16.0
-	go.opentelemetry.io/otel/sdk v0.16.0
+	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.17.0
+	go.opentelemetry.io/contrib/propagators v0.17.0
+	go.opentelemetry.io/otel v0.17.0
+	go.opentelemetry.io/otel/exporters/otlp v0.17.0
+	go.opentelemetry.io/otel/exporters/trace/jaeger v0.17.0
+	go.opentelemetry.io/otel/sdk v0.17.0
 	golang.org/x/net v0.0.0-20210119194325-5f4716e94777
 	golang.org/x/oauth2 v0.0.0-20210113205817-d3ed898aa8a3 // indirect
 	golang.org/x/sys v0.0.0-20210123111255-9b0068b26619 // indirect

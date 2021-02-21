@@ -15,35 +15,10 @@ we wrap server.js and force it to wait for the async function.
 envDetector) but it is easier to implement overall, so I prefer it.
 */
 
-if(process.env.DISABLE_PROFILER) {
-  console.log("Profiler disabled.")
-}
-else {
-  console.log("Profiler enabled.")
-  require('@google-cloud/profiler').start({
-    serviceContext: {
-      service: 'paymentservice',
-      version: '1.0.0'
-    }
-  });
-}
+//require('dotenv').config()
 
-if(process.env.DISABLE_DEBUGGER) {
-  console.log("Debugger disabled.")
-}
-else {
-  console.log("Debugger enabled.")
-  require('@google-cloud/debug-agent').start({
-    serviceContext: {
-      service: 'paymentservice',
-      version: 'VERSION'
-    }
-  });
-}
-
-const path = require('path');
-const PORT = process.env['PORT'];
-const PROTO_PATH = path.join(__dirname, '/proto/');
+// Import the wrapped server.js script.
+startServer = require('./server');
 
 if (process.env.DISABLE_TRACING) {
   console.log("Tracing disabled.")
@@ -52,12 +27,6 @@ if (process.env.DISABLE_TRACING) {
 else {
   console.log("Tracing enabled.")
   initTracer(startServer);
-}
-
-function startServer() {
-  const HipsterShopServer = require('./server');
-  const server = new HipsterShopServer(PROTO_PATH, PORT);
-  server.listen();
 }
 
 async function initTracer(callback) {
@@ -69,7 +38,7 @@ async function initTracer(callback) {
     require("@opentelemetry/propagator-b3");
   const { ZipkinExporter } =
     require('@opentelemetry/exporter-zipkin');
-  const { GrpcInstrumentation } = 
+  const { GrpcInstrumentation } =
     require('@opentelemetry/instrumentation-grpc');
 
   /* 
@@ -110,8 +79,8 @@ async function initTracer(callback) {
   // sdk.start() auto-adds attributes from OTEL_RESOURCE_ATTRIBUTES.
   await sdk
     .start()
-    .then(() => { 
+    .then(() => {
       const grpcInstrumentation = new GrpcInstrumentation();
-      grpcInstrumentation.enable();    
-      callback() });  
+      grpcInstrumentation.enable();
+      callback() });
 }
