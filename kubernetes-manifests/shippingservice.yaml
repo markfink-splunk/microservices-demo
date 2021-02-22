@@ -28,20 +28,35 @@ spec:
       serviceAccountName: default
       containers:
       - name: server
-        image: shippingservice
+        image: hs-shippingservice
         ports:
         - containerPort: 50051
         env:
         - name: PORT
           value: "50051"
-        # - name: DISABLE_STATS
-        #   value: "1"
         # - name: DISABLE_TRACING
         #   value: "1"
-        # - name: DISABLE_PROFILER
-        #   value: "1"
-        # - name: JAEGER_SERVICE_ADDR
-        #   value: "jaeger-collector:14268"
+        - name: DISABLE_PROFILER
+          value: "1"
+        - name: K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: OTEL_TRACES_EXPORTER
+          value: jaeger
+        - name: JAEGER_ENDPOINT
+          value: http://$(K8S_NODE_NAME):9080/v1/trace
+        - name: JAEGER_SERVICE_NAME
+          value: shippingservice
+        - name: JAEGER_TAGS
+          value: environment=hipster_shop
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: $(K8S_NODE_NAME):4317
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.name=shippingservice,environment=hipster_shop
+        - name: OTEL_PROPAGATORS
+          value: b3multi
         readinessProbe:
           periodSeconds: 5
           exec:

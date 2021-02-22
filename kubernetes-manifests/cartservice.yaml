@@ -29,12 +29,29 @@ spec:
       terminationGracePeriodSeconds: 5
       containers:
       - name: server
-        image: cartservice
+        image: hs-cartservice
         ports:
         - containerPort: 7070
         env:
+        - name: K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: SIGNALFX_ENV
+          value: hipster_shop
+        - name: SIGNALFX_SERVICE_NAME
+          value: cartservice
+        - name: SIGNALFX_ENDPOINT_URL
+          value: http://$(K8S_NODE_NAME):9080/v1/trace
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://$(K8S_NODE_NAME):4317
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.name=cartservice,environment=hipster_shop
+        - name: OTEL_PROPAGATORS
+          value: b3multi
         - name: REDIS_ADDR
-          value: "redis-cart:6379"
+          value: redis-cart:6379
         resources:
           requests:
             cpu: 200m

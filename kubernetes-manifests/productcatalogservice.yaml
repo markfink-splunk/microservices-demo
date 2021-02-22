@@ -29,20 +29,35 @@ spec:
       terminationGracePeriodSeconds: 5
       containers:
       - name: server
-        image: productcatalogservice
+        image: hs-productcatalogservice
         ports:
         - containerPort: 3550
         env:
         - name: PORT
           value: "3550"
-        # - name: DISABLE_STATS
-        #   value: "1"
         # - name: DISABLE_TRACING
         #   value: "1"
-        # - name: DISABLE_PROFILER
-        #   value: "1"
-        # - name: JAEGER_SERVICE_ADDR
-        #   value: "jaeger-collector:14268"
+        - name: DISABLE_PROFILER
+          value: "1"
+        - name: K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: OTEL_TRACES_EXPORTER
+          value: jaeger
+        - name: JAEGER_ENDPOINT
+          value: http://$(K8S_NODE_NAME):9080/v1/trace
+        - name: JAEGER_SERVICE_NAME
+          value: productcatalogservice
+        - name: JAEGER_TAGS
+          value: environment=hipster_shop
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: $(K8S_NODE_NAME):4317
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.name=productcatalogservice,environment=hipster_shop
+        - name: OTEL_PROPAGATORS
+          value: b3multi
         readinessProbe:
           exec:
             command: ["/bin/grpc_health_probe", "-addr=:3550"]

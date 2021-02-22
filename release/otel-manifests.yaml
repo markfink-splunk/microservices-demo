@@ -1,0 +1,870 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adservice
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: adservice
+  template:
+    metadata:
+      labels:
+        app: adservice
+    spec:
+      containers:
+      - env:
+        - name: PORT
+          value: "9555"
+        - name: K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: OTEL_TRACES_EXPORTER
+          value: jaeger
+        - name: OTEL_EXPORTER_JAEGER_ENDPOINT
+          value: http://$(K8S_NODE_NAME):14250
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.name=adservice,environment=hipster_shop
+        - name: OTEL_PROPAGATORS
+          value: b3multi,baggage
+        image: marksfink/hs-adservice:5be42c9@sha256:83d219f56f0ecc0487f9b87ea36888f061994b0596e4796d9df4df1e0864c81f
+        livenessProbe:
+          exec:
+            command:
+            - /bin/grpc_health_probe
+            - -addr=:9555
+          initialDelaySeconds: 20
+          periodSeconds: 15
+        name: server
+        ports:
+        - containerPort: 9555
+        readinessProbe:
+          exec:
+            command:
+            - /bin/grpc_health_probe
+            - -addr=:9555
+          initialDelaySeconds: 20
+          periodSeconds: 15
+        resources:
+          limits:
+            cpu: 300m
+            memory: 300Mi
+          requests:
+            cpu: 200m
+            memory: 180Mi
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: adservice
+  namespace: default
+spec:
+  ports:
+  - name: grpc
+    port: 9555
+    targetPort: 9555
+  selector:
+    app: adservice
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cartservice
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: cartservice
+  template:
+    metadata:
+      labels:
+        app: cartservice
+    spec:
+      containers:
+      - env:
+        - name: K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: SIGNALFX_ENV
+          value: hipster_shop
+        - name: SIGNALFX_SERVICE_NAME
+          value: cartservice
+        - name: SIGNALFX_ENDPOINT_URL
+          value: http://$(K8S_NODE_NAME):9080/v1/trace
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://$(K8S_NODE_NAME):4317
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.name=cartservice,environment=hipster_shop
+        - name: OTEL_PROPAGATORS
+          value: b3multi
+        - name: REDIS_ADDR
+          value: redis-cart:6379
+        image: marksfink/hs-cartservice:5be42c9@sha256:ffc079bba5f94b6f5c7011039b741c02732a9e58513192acb701175d4a1fd585
+        livenessProbe:
+          exec:
+            command:
+            - /bin/grpc_health_probe
+            - -addr=:7070
+            - -rpc-timeout=5s
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        name: server
+        ports:
+        - containerPort: 7070
+        readinessProbe:
+          exec:
+            command:
+            - /bin/grpc_health_probe
+            - -addr=:7070
+            - -rpc-timeout=5s
+          initialDelaySeconds: 15
+        resources:
+          limits:
+            cpu: 300m
+            memory: 128Mi
+          requests:
+            cpu: 200m
+            memory: 64Mi
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cartservice
+  namespace: default
+spec:
+  ports:
+  - name: grpc
+    port: 7070
+    targetPort: 7070
+  selector:
+    app: cartservice
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkoutservice
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: checkoutservice
+  template:
+    metadata:
+      labels:
+        app: checkoutservice
+    spec:
+      containers:
+      - env:
+        - name: PORT
+          value: "5050"
+        - name: PRODUCT_CATALOG_SERVICE_ADDR
+          value: productcatalogservice:3550
+        - name: SHIPPING_SERVICE_ADDR
+          value: shippingservice:50051
+        - name: PAYMENT_SERVICE_ADDR
+          value: paymentservice:50051
+        - name: EMAIL_SERVICE_ADDR
+          value: emailservice:5000
+        - name: CURRENCY_SERVICE_ADDR
+          value: currencyservice:7000
+        - name: CART_SERVICE_ADDR
+          value: cartservice:7070
+        - name: DISABLE_PROFILER
+          value: "1"
+        - name: K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: OTEL_TRACES_EXPORTER
+          value: jaeger
+        - name: JAEGER_ENDPOINT
+          value: http://$(K8S_NODE_NAME):9080/v1/trace
+        - name: JAEGER_SERVICE_NAME
+          value: checkoutservice
+        - name: JAEGER_TAGS
+          value: environment=hipster_shop
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: $(K8S_NODE_NAME):4317
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.name=checkoutservice,environment=hipster_shop
+        - name: OTEL_PROPAGATORS
+          value: b3multi
+        image: marksfink/hs-checkoutservice:5be42c9@sha256:9032e29e7eec9ae8056b77be1ae8062dde044886525e75d1d0c566cff0cd812e
+        livenessProbe:
+          exec:
+            command:
+            - /bin/grpc_health_probe
+            - -addr=:5050
+        name: server
+        ports:
+        - containerPort: 5050
+        readinessProbe:
+          exec:
+            command:
+            - /bin/grpc_health_probe
+            - -addr=:5050
+        resources:
+          limits:
+            cpu: 200m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 64Mi
+      serviceAccountName: default
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: checkoutservice
+  namespace: default
+spec:
+  ports:
+  - name: grpc
+    port: 5050
+    targetPort: 5050
+  selector:
+    app: checkoutservice
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: currencyservice
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: currencyservice
+  template:
+    metadata:
+      labels:
+        app: currencyservice
+    spec:
+      containers:
+      - env:
+        - name: PORT
+          value: "7000"
+        - name: DISABLE_PROFILER
+          value: "1"
+        - name: DISABLE_DEBUGGER
+          value: "1"
+        - name: K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: $(K8S_NODE_NAME):4317
+        - name: OTEL_EXPORTER_ZIPKIN_ENDPOINT
+          value: http://$(K8S_NODE_NAME):9080/v1/trace
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.name=currencyservice,environment=hipster_shop
+        - name: OTEL_PROPAGATORS
+          value: b3multi
+        image: marksfink/hs-currencyservice:5be42c9@sha256:ae0ae58aa835b9f7aca00b95e7b1853a4187b0b2052b5336d719b9f6f7883286
+        livenessProbe:
+          exec:
+            command:
+            - /bin/grpc_health_probe
+            - -addr=:7000
+        name: server
+        ports:
+        - containerPort: 7000
+          name: grpc
+        readinessProbe:
+          exec:
+            command:
+            - /bin/grpc_health_probe
+            - -addr=:7000
+        resources:
+          limits:
+            cpu: 200m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 64Mi
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: currencyservice
+  namespace: default
+spec:
+  ports:
+  - name: grpc
+    port: 7000
+    targetPort: 7000
+  selector:
+    app: currencyservice
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: emailservice
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: emailservice
+  template:
+    metadata:
+      labels:
+        app: emailservice
+    spec:
+      containers:
+      - env:
+        - name: PORT
+          value: "8080"
+        - name: DISABLE_PROFILER
+          value: "1"
+        - name: K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: OTEL_EXPORTER
+          value: jaeger
+        - name: OTEL_EXPORTER_JAEGER_ENDPOINT
+          value: $(K8S_NODE_NAME):9080/v1/trace
+        - name: OTEL_PYTHON_SERVICE_NAME
+          value: emailservice
+        - name: OTEL_EXPORTER_OTLP_INSECURE
+          value: "true"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: $(K8S_NODE_NAME):4317
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.name=emailservice,environment=hipster_shop
+        - name: OTEL_PROPAGATORS
+          value: b3,baggage
+        image: marksfink/hs-emailservice:5be42c9@sha256:a0566995169425cc6ff58d145dd377958bd9f772e30c4e9ce7ff3e4f3d746229
+        livenessProbe:
+          exec:
+            command:
+            - /bin/grpc_health_probe
+            - -addr=:8080
+          periodSeconds: 5
+        name: server
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          exec:
+            command:
+            - /bin/grpc_health_probe
+            - -addr=:8080
+          periodSeconds: 5
+        resources:
+          limits:
+            cpu: 200m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 64Mi
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: emailservice
+  namespace: default
+spec:
+  ports:
+  - name: grpc
+    port: 5000
+    targetPort: 8080
+  selector:
+    app: emailservice
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      annotations:
+        sidecar.istio.io/rewriteAppHTTPProbers: "true"
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - env:
+        - name: PORT
+          value: "8080"
+        - name: PRODUCT_CATALOG_SERVICE_ADDR
+          value: productcatalogservice:3550
+        - name: CURRENCY_SERVICE_ADDR
+          value: currencyservice:7000
+        - name: CART_SERVICE_ADDR
+          value: cartservice:7070
+        - name: RECOMMENDATION_SERVICE_ADDR
+          value: recommendationservice:8080
+        - name: SHIPPING_SERVICE_ADDR
+          value: shippingservice:50051
+        - name: CHECKOUT_SERVICE_ADDR
+          value: checkoutservice:5050
+        - name: AD_SERVICE_ADDR
+          value: adservice:9555
+        - name: ENV_PLATFORM
+          value: onprem
+        - name: DISABLE_PROFILER
+          value: "1"
+        - name: K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: OTEL_TRACES_EXPORTER
+          value: jaeger
+        - name: JAEGER_ENDPOINT
+          value: http://$(K8S_NODE_NAME):9080/v1/trace
+        - name: JAEGER_SERVICE_NAME
+          value: frontend
+        - name: JAEGER_TAGS
+          value: environment=hipster_shop
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: $(K8S_NODE_NAME):4317
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.name=frontend,environment=hipster_shop
+        - name: OTEL_PROPAGATORS
+          value: b3multi
+        image: marksfink/hs-frontend:5be42c9@sha256:99bd1c7fece0845c27cb705d3c04a721008537210859923988d2943f89cb24c2
+        livenessProbe:
+          httpGet:
+            httpHeaders:
+            - name: Cookie
+              value: shop_session-id=x-liveness-probe
+            path: /_healthz
+            port: 8080
+          initialDelaySeconds: 10
+        name: server
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            httpHeaders:
+            - name: Cookie
+              value: shop_session-id=x-readiness-probe
+            path: /_healthz
+            port: 8080
+          initialDelaySeconds: 10
+        resources:
+          limits:
+            cpu: 200m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 64Mi
+      serviceAccountName: default
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: default
+spec:
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+  selector:
+    app: frontend
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-external
+  namespace: default
+spec:
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+  selector:
+    app: frontend
+  type: NodePort
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: paymentservice
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: paymentservice
+  template:
+    metadata:
+      labels:
+        app: paymentservice
+    spec:
+      containers:
+      - env:
+        - name: PORT
+          value: "50051"
+        - name: DISABLE_PROFILER
+          value: "1"
+        - name: DISABLE_DEBUGGER
+          value: "1"
+        - name: K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: $(K8S_NODE_NAME):4317
+        - name: OTEL_EXPORTER_ZIPKIN_ENDPOINT
+          value: http://$(K8S_NODE_NAME):9080/v1/trace
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.name=paymentservice,environment=hipster_shop
+        - name: OTEL_PROPAGATORS
+          value: b3multi
+        image: marksfink/hs-paymentservice:5be42c9@sha256:7054eeb0a037199077caa9e8a90451f4b8bf0ac4fa20bf6773a607e5abbc98a4
+        livenessProbe:
+          exec:
+            command:
+            - /bin/grpc_health_probe
+            - -addr=:50051
+        name: server
+        ports:
+        - containerPort: 50051
+        readinessProbe:
+          exec:
+            command:
+            - /bin/grpc_health_probe
+            - -addr=:50051
+        resources:
+          limits:
+            cpu: 200m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 64Mi
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: paymentservice
+  namespace: default
+spec:
+  ports:
+  - name: grpc
+    port: 50051
+    targetPort: 50051
+  selector:
+    app: paymentservice
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: productcatalogservice
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: productcatalogservice
+  template:
+    metadata:
+      labels:
+        app: productcatalogservice
+    spec:
+      containers:
+      - env:
+        - name: PORT
+          value: "3550"
+        - name: DISABLE_PROFILER
+          value: "1"
+        - name: K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: OTEL_TRACES_EXPORTER
+          value: jaeger
+        - name: JAEGER_ENDPOINT
+          value: http://$(K8S_NODE_NAME):9080/v1/trace
+        - name: JAEGER_SERVICE_NAME
+          value: productcatalogservice
+        - name: JAEGER_TAGS
+          value: environment=hipster_shop
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: $(K8S_NODE_NAME):4317
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.name=productcatalogservice,environment=hipster_shop
+        - name: OTEL_PROPAGATORS
+          value: b3multi
+        image: marksfink/hs-productcatalogservice:5be42c9@sha256:18f8849a0755ba40f567ec40388947c49fc6fb441c0b709d952b43d36669396d
+        livenessProbe:
+          exec:
+            command:
+            - /bin/grpc_health_probe
+            - -addr=:3550
+        name: server
+        ports:
+        - containerPort: 3550
+        readinessProbe:
+          exec:
+            command:
+            - /bin/grpc_health_probe
+            - -addr=:3550
+        resources:
+          limits:
+            cpu: 200m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 64Mi
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: productcatalogservice
+  namespace: default
+spec:
+  ports:
+  - name: grpc
+    port: 3550
+    targetPort: 3550
+  selector:
+    app: productcatalogservice
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: recommendationservice
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: recommendationservice
+  template:
+    metadata:
+      labels:
+        app: recommendationservice
+    spec:
+      containers:
+      - env:
+        - name: PORT
+          value: "8080"
+        - name: PRODUCT_CATALOG_SERVICE_ADDR
+          value: productcatalogservice:3550
+        - name: DISABLE_PROFILER
+          value: "1"
+        - name: DISABLE_DEBUGGER
+          value: "1"
+        - name: K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: OTEL_EXPORTER
+          value: jaeger
+        - name: OTEL_EXPORTER_JAEGER_ENDPOINT
+          value: $(K8S_NODE_NAME):9080/v1/trace
+        - name: OTEL_PYTHON_SERVICE_NAME
+          value: recommendationservice
+        - name: OTEL_EXPORTER_OTLP_INSECURE
+          value: "true"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: $(K8S_NODE_NAME):4317
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.name=recommendationservice,environment=hipster_shop
+        - name: OTEL_PROPAGATORS
+          value: b3,baggage
+        image: marksfink/hs-recommendationservice:5be42c9@sha256:a7c30d49ac1d0689a7324d388a540bef64782b7c9cf3fea0938a33a06677e80d
+        livenessProbe:
+          exec:
+            command:
+            - /bin/grpc_health_probe
+            - -addr=:8080
+          periodSeconds: 5
+        name: server
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          exec:
+            command:
+            - /bin/grpc_health_probe
+            - -addr=:8080
+          periodSeconds: 5
+        resources:
+          limits:
+            cpu: 200m
+            memory: 450Mi
+          requests:
+            cpu: 100m
+            memory: 220Mi
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: recommendationservice
+  namespace: default
+spec:
+  ports:
+  - name: grpc
+    port: 8080
+    targetPort: 8080
+  selector:
+    app: recommendationservice
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-cart
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: redis-cart
+  template:
+    metadata:
+      labels:
+        app: redis-cart
+    spec:
+      containers:
+      - image: redis:alpine
+        livenessProbe:
+          periodSeconds: 5
+          tcpSocket:
+            port: 6379
+        name: redis
+        ports:
+        - containerPort: 6379
+        readinessProbe:
+          periodSeconds: 5
+          tcpSocket:
+            port: 6379
+        resources:
+          limits:
+            cpu: 125m
+            memory: 256Mi
+          requests:
+            cpu: 70m
+            memory: 200Mi
+        volumeMounts:
+        - mountPath: /data
+          name: redis-data
+      volumes:
+      - emptyDir: {}
+        name: redis-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-cart
+  namespace: default
+spec:
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: 6379
+  selector:
+    app: redis-cart
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shippingservice
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: shippingservice
+  template:
+    metadata:
+      labels:
+        app: shippingservice
+    spec:
+      containers:
+      - env:
+        - name: PORT
+          value: "50051"
+        - name: DISABLE_PROFILER
+          value: "1"
+        - name: K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: OTEL_TRACES_EXPORTER
+          value: jaeger
+        - name: JAEGER_ENDPOINT
+          value: http://$(K8S_NODE_NAME):9080/v1/trace
+        - name: JAEGER_SERVICE_NAME
+          value: shippingservice
+        - name: JAEGER_TAGS
+          value: environment=hipster_shop
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: $(K8S_NODE_NAME):4317
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.name=shippingservice,environment=hipster_shop
+        - name: OTEL_PROPAGATORS
+          value: b3multi
+        image: marksfink/hs-shippingservice:5be42c9@sha256:d11566df2643ef06c770c892121bfacd3cdeddca7e73b732f24a8d86f8b670e5
+        livenessProbe:
+          exec:
+            command:
+            - /bin/grpc_health_probe
+            - -addr=:50051
+        name: server
+        ports:
+        - containerPort: 50051
+        readinessProbe:
+          exec:
+            command:
+            - /bin/grpc_health_probe
+            - -addr=:50051
+          periodSeconds: 5
+        resources:
+          limits:
+            cpu: 200m
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 64Mi
+      serviceAccountName: default
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shippingservice
+  namespace: default
+spec:
+  ports:
+  - name: grpc
+    port: 50051
+    targetPort: 50051
+  selector:
+    app: shippingservice
+  type: ClusterIP

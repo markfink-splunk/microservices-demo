@@ -29,7 +29,7 @@ spec:
       terminationGracePeriodSeconds: 5
       containers:
       - name: server
-        image: emailservice
+        image: hs-emailservice
         ports:
         - containerPort: 8080
         env:
@@ -39,6 +39,25 @@ spec:
         #   value: "1"
         - name: DISABLE_PROFILER
           value: "1"
+        - name: K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: OTEL_EXPORTER
+          value: jaeger
+        - name: OTEL_EXPORTER_JAEGER_ENDPOINT
+          value: $(K8S_NODE_NAME):9080/v1/trace
+        - name: OTEL_PYTHON_SERVICE_NAME
+          value: emailservice
+        - name: OTEL_EXPORTER_OTLP_INSECURE
+          value: "true"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: $(K8S_NODE_NAME):4317
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.name=emailservice,environment=hipster_shop
+        - name: OTEL_PROPAGATORS
+          value: b3,baggage
         readinessProbe:
           periodSeconds: 5
           exec:

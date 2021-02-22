@@ -20,27 +20,27 @@ build:
   # must provide a "default repo" using one of the methods described
   # here:
   # https://skaffold.dev/docs/concepts/#image-repository-handling
-  - image: emailservice
+  - image: hs-emailservice
     context: src/emailservice
-  - image: productcatalogservice
+  - image: hs-productcatalogservice
     context: src/productcatalogservice
-  - image: recommendationservice
+  - image: hs-recommendationservice
     context: src/recommendationservice
-  - image: shippingservice
+  - image: hs-shippingservice
     context: src/shippingservice
-  - image: checkoutservice
+  - image: hs-checkoutservice
     context: src/checkoutservice
-  - image: paymentservice
+  - image: hs-paymentservice
     context: src/paymentservice
-  - image: currencyservice
+  - image: hs-currencyservice
     context: src/currencyservice
-  - image: cartservice
-    context: src/cartservice
-  - image: frontend
+  - image: hs-cartservice
+    context: src/cartservice-sfx
+  - image: hs-frontend
     context: src/frontend
-  - image: loadgenerator
-    context: src/loadgenerator
-  - image: adservice
+  #- image: hs-loadgenerator
+  #  context: src/loadgenerator
+  - image: hs-adservice
     context: src/adservice
   tagPolicy:
     gitCommit: {}
